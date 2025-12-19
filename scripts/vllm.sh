@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=4,5,6,7 vllm serve ./huggingface/Qwen2.5-VL-72B-Instruct --task generate  --trust-remote-code --port 14396 --api-key ljc --served-model-name Qwen2.5-VL-72B --limit-mm-per-prompt.image 1 --tensor_parallel_size 4

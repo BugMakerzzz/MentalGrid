@@ -1,0 +1,23 @@
+# VLM
+vlm:
+  model_name: Qwen3-VL-8B
+  model_url: 139
+  model_port: 14396
+
+  # MLLM sampling parameters
+  do_sample: false
+  temperature: 0.0
+  max_new_tokens: 10000
+  
+
+# Segmentation - SAM2.1 + grounding-dino
+segmentation:
+  ckpt_path: /mnt/userdata/ljc/model/sam2.1_hiera_large.pt
+  config: configs/sam2.1/sam2.1_hiera_l.yaml
+  grounding_path: /netcache/huggingface/grounding-dino-tiny
+  box_threshold: 0.4
+  text_threshold: 0.3
+
+# Depth - Mogev2
+depth:
+  ckpt_path: /netcache/huggingface/moge-2-vitl-normal/model.pt
