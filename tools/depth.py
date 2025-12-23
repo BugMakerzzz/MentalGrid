@@ -4,7 +4,7 @@ import cv2
 
 class DepthModule:
     def __init__(self, config, device) -> None:
-        self.moge2_model = MoGeModel.from_pretrained(MOGE2_MODEL_ID).to(device)
+        self.moge_model = MoGeModel.from_pretrained(config.ckpt_path).to(device)
         self.device = device
     
     def run_moge(self, image_bgr):
@@ -49,7 +49,7 @@ class DepthModule:
                 m = masks[i]
                 pts_i = self.extract_object_points(points, valid_mask, m)
                 c_i = self.centroid(pts_i)
-                if not c_i:
+                if c_i is None:
                     continue
                 instances.append({
                     "instance_id": i,

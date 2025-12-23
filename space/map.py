@@ -31,7 +31,7 @@ class ObjectMap:
         return rounded_distance
     
     
-    def get_direction(self, target_obj, view_obj, time_step=-1):
+    def get_direction(self, target_obj, view_obj, time_step=-1, centric=Centric.ALLO):
         loc1 = self.get_location(target_obj, time_step=time_step)
         loc2 = self.get_location(view_obj, time_step=time_step)
         relative_x = loc1[0] - loc2[0]
@@ -40,7 +40,7 @@ class ObjectMap:
         angle_degrees = math.degrees(angle_radians)
         adjusted_angle = 90 - angle_degrees
         
-        if view_obj == 'camera':
+        if centric == Centric.EGO:
             yaw = self.yaw_history[time_step]
             if yaw == (0, 1):
                 view_yaw_deg = 0

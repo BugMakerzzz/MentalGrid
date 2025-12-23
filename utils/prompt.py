@@ -1,9 +1,12 @@
 ZERO_SHOT_COT_SYSTEM_PROMPT = """
 You are a spatial-reasoning assistant.
 
-At the initial state, you are located at the camera position.
-The camera's initial facing direction defines North (a fixed global direction).
-Forward/Right/Left/Behind is defined relative to your current facing direction and may change over time.
+Rule
+----
+The following rules define position, orientation, and coordinates:
+1. Your initial position is exactly the camera viewpoint from which the image is captured.
+2. Your initial facing direction is the direction the camera is pointing toward. This direction is defined as North and remains globally fixed.
+3. The relative directions forward, backward, left, and right are always defined with respect to your current facing direction, and may change as you rotate.
 
 Task
 -----
@@ -22,9 +25,12 @@ The last line of your response should be of the following format: # Answer: A/B/
 DEFAULT_SYSTEM_PROMPT = """
 You are a spatial-reasoning assistant.
 
-At the initial state, you are located at the camera position.
-The camera’s initial facing direction defines North (a fixed global direction).
-Forward/Right/Left/Behind is defined relative to your current facing direction and may change over time.
+Rule
+----
+The following rules define position, orientation, and coordinates:
+1. Your initial position is exactly the camera viewpoint from which the image is captured.
+2. Your initial facing direction is the direction the camera is pointing toward. This direction is defined as North and remains globally fixed.
+3. The relative directions forward, backward, left, and right are always defined with respect to your current facing direction, and may change as you rotate.
 
 Task
 -----
@@ -42,6 +48,13 @@ The last line of your response should be of the following format: # Answer: A/B/
 
 MANUAL_COT_SYSTEM_PROMPT = """
 You are a spatial-reasoning assistant.
+
+Rule
+----
+The following rules define position, orientation, and coordinates:
+1. Your initial position is exactly the camera viewpoint from which the image is captured.
+2. Your initial facing direction is the direction the camera is pointing toward. This direction is defined as North and remains globally fixed.
+3. The relative directions forward, backward, left, and right are always defined with respect to your current facing direction, and may change as you rotate.
 
 Task
 -----
@@ -79,19 +92,22 @@ Do not add any extra thought, just output the response in the form mentioned abo
 
 # Example 1
 In which direction is the indoor_plant located relative to the table?\n(A) Left Forward (B) Left Backward (C) Right Forward (D) Forward
-# Answer: indoor_plant. table
+# Answer: indoor_plant. table.
 
 # Examples 2
 Suppose we perform the following movements in the image: First, the table moves forward by 1.5 meters. Finally, the chair moves backward by 0.5 meters. If you are in the camera's viewpoint, which object is the closest to you?\n(A) chair (B) wall_cabinet (C) tv_stand (D) table
-# Answer: table. chair. camera. wall_cabinet. tv_stand
+# Answer: table. chair. camera. wall_cabinet. tv_stand.
 """
 
 MAP_COT_SYSTEM_PROMPT =  """
 You are a spatial-reasoning assistant.
 
-At the initial state, you are located at the camera position.
-The camera's initial facing direction defines North (a fixed global direction).
-Forward/Right/Left/Behind is defined relative to your current facing direction and may change over time.
+Rule
+----
+The following rules define position, orientation, and coordinates:
+1. Your initial position is (0, 0), and your initial facing direction is the positive y-axis (+y).
+2. The positive y-axis is defined as North and remains globally fixed, while the positive x-axis (+x) is defined as East.
+3. The relative directions forward, backward, left, and right are always defined with respect to your current facing direction, and may change as you rotate.
 
 Task
 -----

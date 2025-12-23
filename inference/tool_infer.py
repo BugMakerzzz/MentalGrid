@@ -84,7 +84,7 @@ class ToolPipeline:
         return objs_of_interest
 
 
-    def run_tool_infer(
+    def generate(
         self,
         example,
         # perspective_prompt_type: str = "visual",
@@ -99,8 +99,8 @@ class ToolPipeline:
 
 
         seg_out = self.segmentation_module.run_segmentation(image_path=example['image_path'],
-                                                                                 prompt=objects_str)
-      
+                                                                                  prompt=objects_str)
+
         object_locations = self.depth_module.run_depth(image_path=example['image_path'], seg_out=seg_out)
         conv_history['obj_location'] =  object_locations
         

@@ -74,15 +74,20 @@ QUESTION_TEMPLATES = {
     },
     QueryType.DISTANCE_TRACKING: {
         Centric.EGO: [
-            "Please describe the change in distance between {target_obj} and you throughout the entire movement process?\n{options}",
+            "During the movement process, the distance change between you and {target_obj} at each action step is:\n"
+            "{masked_seq}\n"
+            "Please choose the option that correctly fills in the [MASK] tokens.\n{options}"
         ],
         Centric.ALLO: [
-            "Please describe the change in distance between {target_obj} and {view_obj} throughout the entire movement process?\n{options}",
+            "During the movement process, the distance change between {target_obj} and {view_obj} at each step is:\n"
+            "{masked_seq}\n"
+            "Please choose the option that correctly fills in the [MASK] tokens.\n{options}"
         ]
     },
     QueryType.DIRECTION_EVALUATION: {
         Centric.EGO: [
-            "Which direction is the {target_obj} relative to you?\n{options}"
+            "Which direction is the {target_obj} relative to you?\n{options}",
+            "From your perspective, which direction is the {target_obj} located relative to the {view_obj}?\n{options}"
         ],
         Centric.ALLO: [
             "Which direction is the {target_obj} located relative to the {view_obj}?\n{options}"
@@ -90,7 +95,8 @@ QUESTION_TEMPLATES = {
     },
     QueryType.DIRECTION_LOCATION: {
         Centric.EGO: [
-            "Which object(s) are located in your {direction}?\n{options}"
+            "Which object(s) are located in your {direction}?\n{options}",
+            "From your perspective, which object(s) are located in the {direction} of the {target_obj}?\n{options}"
         ],
         Centric.ALLO: [
             "Which object(s) are located in the {direction} of the {target_obj}?\n{options}"
@@ -98,34 +104,17 @@ QUESTION_TEMPLATES = {
     },
     QueryType.DIRECTION_TRACKING: {
         Centric.EGO: [
-            "Please describe the change in relative direction between {target_obj} and you throughout the entire movement process?\n{options}",
+            "During the movement process, the relative direction between {target_obj} and you at each step is:\n"
+            "{masked_seq}\n"
+            "Please choose the option that correctly fills in the [MASK] tokens.\n{options}",
+            "During the movement process, from your perspective, the relative direction between {target_obj} and {view_obj} at each step is:\n"
+            "{masked_seq}\n"
+            "Please choose the option that correctly fills in the [MASK] tokens.\n{options}"     
         ],
         Centric.ALLO: [
-            "Please describe the change in relative direction between {target_obj} and {view_obj} throughout the entire movement process?\n{options}"
-        ]
-    },
-    QueryType.DISTANCE_DIRECTION_LOCATION: {
-        Centric.EGO: [
-            "Describe the path from {view_obj} to {target_obj}. Each single step should be output in the format of move forward/backward/left/right. If there is an obstacle in the way, include an extra step formatted as 'go around OBJECT'\n{options}"
-        ],
-        Centric.ALLO: [
-            "Describe the path from {view_obj} to {target_obj}. Each single step should be output in the format of move forward/backward/left/right. If there is an obstacle in the way, include an extra step formatted as 'go around OBJECT'\n{options}"
-        ]
-    },
-    QueryType.LOCATION_TRACKING: {
-        Centric.EGO: [
-            "Describe the path from {view_obj} to {target_obj}. Each single step should be output in the format of move forward/backward/left/right. If there is an obstacle in the way, include an extra step formatted as 'go around OBJECT'\n{options}"
-        ],
-        Centric.ALLO: [
-            "Describe the path from {view_obj} to {target_obj}. Each single step should be output in the format of move forward/backward/left/right. If there is an obstacle in the way, include an extra step formatted as 'go around OBJECT'\n{options}"
-        ]
-    },
-    QueryType.MAP_DESCRIPTION: {
-        Centric.EGO: [
-            "Describe the path from {view_obj} to {target_obj}. Each single step should be output in the format of move forward/backward/left/right. If there is an obstacle in the way, include an extra step formatted as 'go around OBJECT'\n{options}"
-        ],
-        Centric.ALLO: [
-            "Describe the path from {view_obj} to {target_obj}. Each single step should be output in the format of move forward/backward/left/right. If there is an obstacle in the way, include an extra step formatted as 'go around OBJECT'\n{options}"
+            "During the movement process, the relative direction between {target_obj} and {view_obj} at each step is:\n"
+            "{masked_seq}\n"
+            "Please choose the option that correctly fills in the [MASK] tokens.\n{options}"
         ]
     }
 }

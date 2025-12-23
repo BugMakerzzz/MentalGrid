@@ -83,8 +83,8 @@ def load_system_prompt(method):
         return DEFAULT_SYSTEM_PROMPT
     
 
-def load_dataset(args, method):
-    path = f'question/{args.dataset}/{args.obj_density}_obj/c{args.camera_steps}_o{args.obj_steps}/mr{args.move_ratio}_er{args.ego_ratio}/{args.type}_{args.centric}.json'
+def load_dataset(args, method, split='val'):
+    path = f'data/data/{args.dataset}/{split}/c{args.camera_steps}_o{args.obj_steps}_mr{args.move_ratio}_er{args.ego_ratio}/{args.type}_{args.centric}.json'
     dataset = load_json_data(path)
     dataset = dataset[:args.n_samples]
     system_prompt = load_system_prompt(method)
