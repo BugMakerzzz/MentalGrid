@@ -364,7 +364,6 @@ def main(args):
     if not os.path.exists(question_dir):
         os.makedirs(question_dir)
     question_path = os.path.join(question_dir, f'{args.type}.json')
-    
     data_rng.shuffle(questions)
     with open(question_path, 'w') as f:
         json.dump(questions, f, indent=4)
