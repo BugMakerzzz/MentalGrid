@@ -17,6 +17,21 @@ class ObjectMap:
         self.n_steps = 1
     
     
+    def get_direction_index(self, angle):
+
+        angle = angle % 360
+        
+        # 0: 345-15, 1: 15-75, 2: 75-105, 3: 105-165, 4: 165-195, 5: 195-255, 6: 255-285, 7: 285-345
+        if angle < 15 or angle >= 345: return 0  # North / Forward
+        if angle < 75:  return 1                 # NE / Right-Forward
+        if angle < 105: return 2                 # East / Right
+        if angle < 165: return 3                 # SE / Right-Backward
+        if angle < 195: return 4                 # South / Backward
+        if angle < 255: return 5                 # SW / Left-Backward
+        if angle < 285: return 6                 # West / Left
+        return 7                                 # NW / Left-Forward
+    
+    
     def get_location(self, object, time_step=-1):
         return self.map_history[time_step][object]
     
@@ -42,23 +57,17 @@ class ObjectMap:
         
         if centric == Centric.EGO:
             yaw = self.yaw_history[time_step]
-            if yaw == (0, 1):
-                view_yaw_deg = 0
-            elif yaw == (1, 0):
-                view_yaw_deg = 90
-            elif yaw == (0, -1):
-                view_yaw_deg = 180
-            else:
-                view_yaw_deg = 270
+            yaw_map = {(0, 1): 0, (1, 0): 90, (0, -1): 180}
+            view_yaw_deg = yaw_map.get(yaw, 270)
                 
             adjusted_angle = (adjusted_angle - view_yaw_deg + 360) % 360
-            index = int((adjusted_angle + 22.5) / 45) % 8
+            index = self.get_direction_index(adjusted_angle)
             return EGO_DIRECTIONS[index]
             
         else:
             adjusted_angle = (adjusted_angle + 360) % 360
 
-            index = int((adjusted_angle + 22.5) / 45) % 8
+            index = self.get_direction_index(adjusted_angle)
             return ALLO_DIRECTIONS[index]
     
     

@@ -2,7 +2,7 @@ import json
 import os
 import base64
 import random 
-from utils.prompt import ZERO_SHOT_COT_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT, MAP_COT_SYSTEM_PROMPT
+from utils.prompt import ZERO_SHOT_COT_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT, MAP_COT_SYSTEM_PROMPT, MAP_PREDICTION_SYSTEM_PROMPT
 from tqdm import tqdm
 from PIL import Image
 random.seed(17)
@@ -16,7 +16,7 @@ def encode_image(image_path):
 
 def embed_openai_input(example, system_prompt):
     content = []
-    if system_prompt in [ZERO_SHOT_COT_SYSTEM_PROMPT]:
+    if system_prompt in [ZERO_SHOT_COT_SYSTEM_PROMPT, MAP_PREDICTION_SYSTEM_PROMPT]:
         base64_image = encode_image(example['image_path'])
         content.append({
             "type": "image_url",
@@ -26,7 +26,7 @@ def embed_openai_input(example, system_prompt):
         })
         content.append({"type": "text", "text": example['query']})
     elif system_prompt in [MAP_COT_SYSTEM_PROMPT]:
-        text = f"Map: {example['context']['map']['map'][0]}\n"
+        text = f"Map: {example['meta']['map']['map'][0]}\n"
         text += f"Question: {example['query']}"
         content.append({"type": "text", "text": text})
     else:
@@ -79,12 +79,14 @@ def load_system_prompt(method):
         return ZERO_SHOT_COT_SYSTEM_PROMPT
     elif method == 'map_cot':
         return MAP_COT_SYSTEM_PROMPT
+    elif method == 'map_prediction':
+        return MAP_PREDICTION_SYSTEM_PROMPT
     else:
         return DEFAULT_SYSTEM_PROMPT
     
 
 def load_dataset(args, method, split='val'):
-    path = f'data/data/{args.dataset}/{split}/c{args.camera_steps}_o{args.obj_steps}_mr{args.move_ratio}_er{args.ego_ratio}/{args.type}_{args.centric}.json'
+    path = f'data/data/{args.dataset}/{split}/c{args.camera_steps}_o{args.obj_steps}_mr{args.move_ratio}_er{args.ego_ratio}/{args.type}.json'
     dataset = load_json_data(path)
     dataset = dataset[:args.n_samples]
     system_prompt = load_system_prompt(method)
@@ -105,8 +107,8 @@ def load_json_data(path):
         f.close()
     return data
 
-def save_json_data(path, data):
-    with open(path, 'w') as f:
+def save_json_data(path, data, mode='w'):
+    with open(path, mode) as f:
         json.dump(data, f, indent=4)
         f.close()
     return 

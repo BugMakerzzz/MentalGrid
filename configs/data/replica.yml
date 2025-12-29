@@ -1,0 +1,21 @@
+name: "replica"
+config_path: "/mnt/userdata/ljc/data/replica_cad/replicaCAD.scene_dataset_config.json"
+semantic_path: "/mnt/userdata/ljc/data/replica_cad/configs/ssd/replicaCAD_semantic_lexicon.json"
+split_path: "/mnt/userdata/ljc/data/replica_cad/scene_splits.yml"
+
+exclude_index: [6, 13, 17, 21, 46, 64]
+similar_groups: {
+  "cabinet": [2, 18, 71, 94],
+  "table": [33, 34, 54, 80, 88],            
+  "electronics": [36, 52, 82, 87],
+  "kitchen_vessels": [55, 65],
+  "box": [3, 10, 15]
+}
+
+max_x: 3.0
+min_x: -3.0
+max_z: -1.0
+min_z: -6.0
+
+min_obj_cnt: 3
+n_samples: 20

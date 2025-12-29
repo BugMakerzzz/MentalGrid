@@ -7,12 +7,15 @@ from space.map import ObjectMap
 from space.action import Action
 from tqdm import tqdm
 import math
+from natsort import natsorted
 
 DISTANCES = ["closer", "unchanged", "farther"]
-ALL_OBJECTS = ["backpack", "candle", "coaster", "lamp", "picture", 
+ALL_OBJECTS = ["backpack", "candle", "coaster", "lamp", "chair", 
                "sink", "tv_screen", "umbrella", "toothbrush", "plant"]
 WRONG_OPTION_CNT = 4
-MIN_DISTANCE = 0.25
+MIN_DISTANCE = 0.5
+
+DATA_SOURCES = ['replica', 'ArchitecTHOR', 'iTHOR', 'ProcTHOR', 'RoboTHOR']
 
 def setup_independent_generators(main_seed, num_generators):
     master_rng = np.random.default_rng(main_seed)
@@ -26,7 +29,7 @@ def load_dataset_scenes(args):
         raise ValueError("No subdirectories found under the given path.")
 
     objects = []
-    for file in os.listdir(info_dir):
+    for file in natsorted(os.listdir(info_dir)):
         if file.endswith(".json"):
             file_path = os.path.join(info_dir, file)
             with open(file_path, 'r') as f:
@@ -42,11 +45,15 @@ def load_dataset_scenes(args):
     return objects   
 
 
-def generate_query(objects, q_type, centric, rng):
+def generate_query(objects, obj_map, q_type, centric, rng):
     template = rng.choice(QUESTION_TEMPLATES[q_type][centric])
     query_objects = list(rng.choice(objects, size=2, replace=False))
-    while (math.dist(query_objects[0], query_objects[1]) < MIN_DISTANCE):
+    attempts = 0
+    while (obj_map.get_distance(query_objects[0], query_objects[1]) < MIN_DISTANCE):
         query_objects = list(rng.choice(objects, size=2, replace=False))
+        attempts += 1
+        if attempts > 100:
+            return None
     if '{view_obj}' not in template:
         query_objects[1] = 'camera'
     if '{target_obj}' not in template:
@@ -59,24 +66,26 @@ def generate_query(objects, q_type, centric, rng):
         "target_obj": query_objects[0],
         "view_obj": query_objects[1]
     }
-    if q_type in [QueryType.DISTANCE_EVALUATION, 
-                  QueryType.DISTANCE_TRACKING,
+    if q_type in [QueryType.DIRECTION_LOCATION, 
                   QueryType.DIRECTION_EVALUATION,
                   QueryType.DIRECTION_TRACKING]:
-        pass 
+        if centric == Centric.EGO:
+            if '{target_obj}' in template:
+                context['meta'] = 'obj-obj'
+            else:
+                context['meta'] = 'obj-cam'
+        else:
+            if '{view_obj}' in template:
+                context['meta'] = 'obj-obj'
+            else:
+                context['meta'] = 'obj-cam'
     elif q_type == QueryType.DISTANCE_LOCATION:
         if 'far' in template:
-            context['distance'] = 'far'
+            context['meta'] = 'max'
         else:
-            context['distance'] = 'close'    
-    elif q_type == QueryType.DIRECTION_LOCATION:
-        if centric == Centric.EGO:
-            direction = rng.choice(EGO_DIRECTIONS)
-        else:
-            direction = rng.choice(ALLO_DIRECTIONS) 
-        context['direction'] = direction
+            context['meta'] = 'min'   
     else:
-        raise TypeError 
+        pass
     return context
 
 
@@ -151,7 +160,7 @@ def generate_answer(query_context, obj_map, rng):
     elif q_type == QueryType.DISTANCE_LOCATION: 
         dists = {obj:obj_map.get_distance(obj1=obj, obj2=target_obj) for obj in objects}
         
-        if query_context['distance'] == 'far':
+        if query_context['meta'] == 'max':
             golden_answer = max(dists, key=dists.get)
         else:
             golden_answer = min(dists, key=dists.get)
@@ -199,24 +208,22 @@ def generate_answer(query_context, obj_map, rng):
         options = list(rng.choice(w_directions, size=WRONG_OPTION_CNT, replace=False))
     
     elif q_type == QueryType.DIRECTION_LOCATION: 
-        direction = query_context['direction']
+        direction = rng.choice(EGO_DIRECTIONS) if centric == Centric.EGO else rng.choice(ALLO_DIRECTIONS) 
         dict = {obj: obj_map.get_direction(target_obj=obj, view_obj=target_obj, centric=centric)
                       for obj in objects}
-        
         cor_objs = [obj for obj in dict if dict[obj] == direction]
         wro_objs = [obj for obj in objects if obj not in cor_objs]
         
         directions = EGO_DIRECTIONS if centric == Centric.EGO else ALLO_DIRECTIONS
-        max_attempts = 100
-        i = 0
+        
+        attempts = 0
         while not wro_objs or not cor_objs:
             direction = rng.choice(directions)
             cor_objs = [obj for obj in dict if dict[obj] == direction]
             wro_objs = [obj for obj in objects if obj not in cor_objs]
-            i += 1
-            if i > max_attempts:
-                break
-
+            attempts += 1
+            if attempts > 100:
+                return None
         query_context['direction'] = direction
         
         for i, cur in enumerate(cor_objs):
@@ -226,11 +233,9 @@ def generate_answer(query_context, obj_map, rng):
                 options.append(cand)
         rng.shuffle(options)
         options = options[:min(len(options), WRONG_OPTION_CNT)]
-        
         golden_answer = (',').join(cor_objs)
         options = [(',').join(option) for option in options]
     
-
     elif q_type == QueryType.DIRECTION_TRACKING:
         dir_history = [obj_map.get_direction(target_obj=target_obj, view_obj=view_obj, time_step=i, centric=centric)
                        for i in range(obj_map.n_steps)]
@@ -259,28 +264,23 @@ def generate_answer(query_context, obj_map, rng):
     random_index = rng.integers(low=0, high=len(options)+1)
     golden_option = chr(ord('A') + random_index)
     options.insert(random_index, golden_answer)
-    answer_msg = {
+    answer_context = {
         'golden_answer': golden_answer,
         'golden_option': golden_option,
         'options': options,
         "masked_seq": masked_seq
     }      
     
-    return answer_msg 
+    return answer_context
 
 
-def generate_single_question(query_context, obj_map, action_text, rng):
-    
-    answer_msg = generate_answer(query_context=query_context,
-                                obj_map=obj_map,
-                                rng=rng) 
-    
+def make_question_text(query_context, answer_context, action_text):
     option_text = ""
-    for i, option in enumerate(answer_msg['options']):
+    for i, option in enumerate(answer_context['options']):
         option_text += f"({chr(ord('A') + i)}) {option} "
     option_text = option_text.strip()
     query_context['options'] = option_text
-    query_context['masked_seq'] = answer_msg['masked_seq']
+    query_context['masked_seq'] = answer_context['masked_seq']
         
     query = ""
     if action_text:
@@ -289,12 +289,12 @@ def generate_single_question(query_context, obj_map, action_text, rng):
     query_text = query_context['text']
     query += query_text.format(**query_context)
 
-    query_context['options'] = answer_msg['options']
-    query_context['golden_answer'] = answer_msg['golden_answer']
+    query_context['options'] = answer_context['options']
+    query_context['golden_answer'] = answer_context['golden_answer']
     query_context['type'] = query_context['type'].value
     query_context['centric'] = query_context['centric'].value
     
-    return query, answer_msg['golden_option'], query_context
+    return query, answer_context['golden_option'], query_context
 
 
 def main(args):
@@ -314,15 +314,16 @@ def main(args):
                 obj_map = ObjectMap(object_info)
                 objects = [obj for obj in obj_map.objects if obj != 'camera']
 
-                query_context = generate_query(objects=objects, 
+                query_context = generate_query(objects=objects,
+                                                obj_map=obj_map,
                                                 q_type=q_type, 
                                                 centric=centric,
                                                 rng=data_rng)
-                
-                if query_context in query_history:
+                if not query_context or query_context in query_history:
                     continue
                 else:
                     query_history.append(query_context)
+                    
                 obj_actions = generate_actions(objects=objects, query_context=query_context, 
                                             n_steps=args.obj_steps, rng=action_rng, 
                                             target_ratio=args.move_ratio, ego_ratio=args.ego_ratio)
@@ -330,24 +331,29 @@ def main(args):
                                                 n_steps=args.camera_steps, rng=action_rng, 
                                                 target_ratio=args.move_ratio, ego_ratio=args.ego_ratio)
                 action_text, actions = merge_action_texts(obj_actions=obj_actions, 
-                                                        camera_actions=camera_actions, rng=action_rng)
+                                                        camera_actions=camera_actions, 
+                                                        rng=action_rng)
                 obj_map.apply_actions(actions)
+                
+                answer_context = generate_answer(query_context=query_context,
+                                             obj_map=obj_map,
+                                             rng=question_rng)
+                if not answer_context:
+                    continue
             
-                query, answer, query_context = generate_single_question(query_context=query_context,
-                                                                        obj_map=obj_map,
-                                                                        action_text=action_text,
-                                                                        rng=question_rng)
+                query, answer, query_context = make_question_text(query_context=query_context,
+                                                                answer_context=answer_context,
+                                                                action_text=action_text)
                 
                 
                 msg = {
-                    'id': f"{args.type.upper()}_{centric.upper()}_Q{idx+1}",
+                    'id': f"{args.type.upper()}_{centric.value.upper()}_Q{idx+1}",
                     'scene': scene_name,
-                    'centric': centric,
                     'obj_cnt': scene_info['obj_cnt'],
                     'image_path': image_path,
                     'query': query,
                     'answer': answer,
-                    'context': {
+                    'meta': {
                         'query': query_context,
                         'action': [action.to_dict() for action in actions] if actions else None,
                         'map': {
@@ -364,7 +370,6 @@ def main(args):
     if not os.path.exists(question_dir):
         os.makedirs(question_dir)
     question_path = os.path.join(question_dir, f'{args.type}.json')
-    data_rng.shuffle(questions)
     with open(question_path, 'w') as f:
         json.dump(questions, f, indent=4)
         f.close()
@@ -374,8 +379,8 @@ def main(args):
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", type=str, default='replica')
 parser.add_argument("--seed", type=int, default=17)
-parser.add_argument("--split", type=str, default='val')
-parser.add_argument("--n_samples", type=int, default=2)
+parser.add_argument("--split", type=str, default='train')
+parser.add_argument("--n_samples", type=int, default=5)
 parser.add_argument("--type", type=str, default='direction_evaluation')
 parser.add_argument("--camera_steps", type=int, default=0)
 parser.add_argument("--obj_steps", type=int, default=0)

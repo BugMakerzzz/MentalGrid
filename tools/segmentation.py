@@ -65,11 +65,19 @@ class SegmentationModule:
             text_threshold=self.config.text_threshold,
             target_sizes=[image.size[::-1]]  # (H, W)
         )
+        # print(results)
+        target_labels = prompt.split('.')[:-1]
+        target_labels = [label.strip() for label in target_labels]
 
         boxes = results[0]["boxes"].cpu().numpy()     # (N, 4)
         labels = results[0]["labels"]                # list[str]
         scores = results[0]["scores"].cpu().numpy().tolist()
-
+        
+        idx_ls = [idx for idx in range(len(labels)) if labels[idx] in target_labels]
+        boxes = [boxes[idx] for idx in idx_ls]
+        labels = [labels[idx] for idx in idx_ls]
+        scores = [scores[idx] for idx in idx_ls]
+        
         if len(boxes) == 0:
             return None
 
