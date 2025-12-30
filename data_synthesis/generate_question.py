@@ -15,7 +15,6 @@ ALL_OBJECTS = ["backpack", "candle", "coaster", "lamp", "chair",
 WRONG_OPTION_CNT = 4
 MIN_DISTANCE = 0.5
 
-DATA_SOURCES = ['replica', 'ArchitecTHOR', 'iTHOR', 'ProcTHOR', 'RoboTHOR']
 
 def setup_independent_generators(main_seed, num_generators):
     master_rng = np.random.default_rng(main_seed)
@@ -377,7 +376,7 @@ def main(args):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--dataset", type=str, default='replica')
+parser.add_argument("--source", type=str, default='replica')
 parser.add_argument("--seed", type=int, default=17)
 parser.add_argument("--split", type=str, default='train')
 parser.add_argument("--n_samples", type=int, default=5)

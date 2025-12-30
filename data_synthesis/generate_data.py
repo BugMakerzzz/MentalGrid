@@ -220,8 +220,8 @@ def main(args):
                 if obj not in objects:
                     rigid_obj_mgr.remove_object_by_handle(obj.handle)
 
-            output_img_dir = f"data/source/{args.dataset}/images/"
-            output_location_dir = f"data/source/{args.dataset}/"
+            output_img_dir = f"data/source/{args.dataset}/{args.split}/images/"
+            output_location_dir = f"data/source/{args.dataset}/{args.split}/"
             if not os.path.exists(output_img_dir):
                 os.makedirs(output_img_dir)
             if not os.path.exists(output_location_dir):
@@ -261,13 +261,12 @@ def main(args):
                 # offset = world_T_cam.transform_point(obj.translation)
                 msg = {
                     'id': obj.object_id,
-                    'name': semantic_dic[obj.semantic_id], 
+                    'name': semantic_dic[obj.semantic_id].lower(), 
                     'location': [offset.x, offset.y, offset.z]
                 }
                 objects_data.append(msg)
                 
             results = {
-                "split": args.split,
                 "obj_cnt": len(objects),
                 "agent": agent_data,
                 "objects": objects_data
