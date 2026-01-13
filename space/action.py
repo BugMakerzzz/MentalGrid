@@ -1,5 +1,5 @@
 from utils.template import Direction, Centric, Movement
-
+import numpy as np
 
 class Action:
     def __init__(self, 
@@ -14,21 +14,20 @@ class Action:
         self._generate_random_action()
         
     def _generate_random_action(self):
-        if self.object == 'camera':
+        if self.object == 'agent':
             if self.move_type == Movement.ROTATION:
                 directions = [dir for dir in list(Direction) if dir != Direction.FORWARD]
                 self.direction = self.rng.choice(directions)
                 self.distance = None 
-            # elif self.move_type == Movement.ALIGN:
-            #     self.direction = self.rng.choice(directions)
+
             else:
                 self.direction = Direction.FORWARD
-                self.distance = self.rng.choice([0.5, 1.5, 2.5])
+                self.distance = round(self.rng.choice(np.arange(0.3, 2.6, 0.1)), 1)
             
         else:
             directions = [dir for dir in list(Direction)]
             self.direction = self.rng.choice(directions)
-            self.distance = self.rng.choice([0.5, 1.5, 2.5])
+            self.distance = round(self.rng.choice(np.arange(0.3, 2.6, 0.1)), 1)
                 
 
     def to_str(self):
@@ -40,7 +39,7 @@ class Action:
             }
         else:
             if self.centric == Centric.EGO: 
-                if self.object == 'camera':
+                if self.object == 'agent':
                     map = {
                         Direction.FORWARD: "move forward"
                     }
@@ -59,7 +58,7 @@ class Action:
                     Direction.RIGHT: "moves east",
                 }
 
-        if self.object == 'camera':
+        if self.object == 'agent':
             if self.move_type == Movement.ROTATION:
                 return f'you {map[self.direction]}.'
             else:

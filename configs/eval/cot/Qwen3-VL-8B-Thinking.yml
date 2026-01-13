@@ -1,0 +1,12 @@
+# VLM
+vlm:
+  model_name: Qwen3-VL-8B-Thinking
+  model_url: 139
+  model_port: 14398
+
+  # MLLM sampling parameters
+  temperature: 0
+  max_tokens: 10000
+  n: 1
+  seed: 17
+  

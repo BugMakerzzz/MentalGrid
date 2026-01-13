@@ -1,393 +1,153 @@
-import numpy as np
+import random
 import json 
-from utils.template import QueryType, Centric, QUESTION_TEMPLATES, Movement, EGO_DIRECTIONS, ALLO_DIRECTIONS
 import argparse
 import os
-from space.map import ObjectMap
-from space.action import Action
+import shutil
 from tqdm import tqdm
-import math
-from natsort import natsorted
-
-DISTANCES = ["closer", "unchanged", "farther"]
-ALL_OBJECTS = ["backpack", "candle", "coaster", "lamp", "chair", 
-               "sink", "tv_screen", "umbrella", "toothbrush", "plant"]
-WRONG_OPTION_CNT = 4
-MIN_DISTANCE = 0.5
+from utils.load_data import save_json_data, load_json_data
+from .question_generator import QuestionGenerator, plot_toy_map
+from utils.template import TaskType, ALL_SCENES, QueryType
+from space.map import ObjectMap
+random.seed(17)
 
 
-def setup_independent_generators(main_seed, num_generators):
-    master_rng = np.random.default_rng(main_seed)
-    return master_rng.spawn(num_generators)
-
-
-def load_dataset_scenes(args):
-    info_dir = f'data/source/{args.dataset}/'
-    image_dir = f'data/source/{args.dataset}/images/'
-    if not info_dir:
-        raise ValueError("No subdirectories found under the given path.")
-
-    objects = []
-    for file in natsorted(os.listdir(info_dir)):
-        if file.endswith(".json"):
-            file_path = os.path.join(info_dir, file)
-            with open(file_path, 'r') as f:
-                object = json.load(f)
-                if object['split'] != args.split:
-                    continue
-                scene = ('_').join(file.split('_')[:-1])
-                image_path = os.path.join(image_dir, f"{scene}.png")
-                object['scene'] = scene
-                object['image_path'] = image_path
-                objects.append(object)
-                f.close()
-    return objects   
-
-
-def generate_query(objects, obj_map, q_type, centric, rng):
-    template = rng.choice(QUESTION_TEMPLATES[q_type][centric])
-    query_objects = list(rng.choice(objects, size=2, replace=False))
-    attempts = 0
-    while (obj_map.get_distance(query_objects[0], query_objects[1]) < MIN_DISTANCE):
-        query_objects = list(rng.choice(objects, size=2, replace=False))
-        attempts += 1
-        if attempts > 100:
-            return None
-    if '{view_obj}' not in template:
-        query_objects[1] = 'camera'
-    if '{target_obj}' not in template:
-        query_objects[0] = 'camera'
-    
-    context = {
-        "type": q_type,
-        "centric": centric,
-        "text": template,
-        "target_obj": query_objects[0],
-        "view_obj": query_objects[1]
-    }
-    if q_type in [QueryType.DIRECTION_LOCATION, 
-                  QueryType.DIRECTION_EVALUATION,
-                  QueryType.DIRECTION_TRACKING]:
-        if centric == Centric.EGO:
-            if '{target_obj}' in template:
-                context['meta'] = 'obj-obj'
-            else:
-                context['meta'] = 'obj-cam'
-        else:
-            if '{view_obj}' in template:
-                context['meta'] = 'obj-obj'
-            else:
-                context['meta'] = 'obj-cam'
-    elif q_type == QueryType.DISTANCE_LOCATION:
-        if 'far' in template:
-            context['meta'] = 'max'
-        else:
-            context['meta'] = 'min'   
-    else:
-        pass
-    return context
-
-
-def generate_actions(objects, query_context, n_steps, rng, target_ratio, ego_ratio):
-    if n_steps == 0:
-        return []
-    
-    query_objects = [query_context['target_obj'], query_context['view_obj']]
-    actions = []
-    target_steps = math.ceil(n_steps * target_ratio)
-    if objects:
-        target_objs = [obj for obj in query_objects if obj != 'camera']
-        for _ in range(n_steps):
-            action_centric = rng.choice(list(Centric), p=[ego_ratio, 1-ego_ratio])
-            if len(actions) < target_steps and target_objs: 
-                obj = rng.choice(target_objs)
-            else:
-                obj = rng.choice(objects)
-            action = Action(object=obj, move_type=Movement.TRANSLATION, 
-                            rng=rng, centric=action_centric)
-            actions.append(action)   
-    else:
-        for _ in range(n_steps):
-            if len(actions) < target_steps: 
-                action = Action(object='camera', move_type=Movement.ROTATION, rng=rng)
-            else: 
-                action = Action(object='camera', move_type=Movement.TRANSLATION, rng=rng)
-            actions.append(action)  
-      
-    return actions   
-   
-   
-def merge_action_texts(obj_actions, camera_actions, rng):
-    actions = obj_actions + camera_actions
-    if not actions:
-        return "", None
-    rng.shuffle(actions)
-
-    step_texts = [action.to_str() for action in actions]
-    if len(step_texts) == 1:
-        action_text = step_texts[0]
-    else:
-        parts = []
-        for idx, txt in enumerate(step_texts):
-            parts.append(f"At step {idx+1}, {txt}")
-        action_text = ' '.join(parts) + ' '
+def load_scene_info(scene_ls, split):
+    scene_infos = []
+    for scene_name in scene_ls:
+        info_dir = f'scenes/{scene_name}/{split}'
+        old_image_dir = f'scenes/{scene_name}/{split}/images/'
+        new_image_dir = f'data/MentalGrid/images/'
+        toy_image_dir = f'data/MentalGrid/toy_images/'
         
-    return action_text, actions
-
-
-def generate_answer(query_context, obj_map, rng):
-    q_type = query_context['type']
-    centric = query_context['centric']
-    target_obj = query_context['target_obj']
-    view_obj = query_context['view_obj']
-    objects = [obj for obj in obj_map.objects if obj not in ['camera', target_obj, view_obj]] 
-    
-    options = []
-    masked_seq = ""
-    if q_type == QueryType.DISTANCE_EVALUATION:
-        golden_answer = obj_map.get_distance(obj1=target_obj, obj2=view_obj)
-        numbers = [round(i * 0.1, 1) for i in range(1, 101)]
-        wrong_distances = [num for num in numbers if abs(num - golden_answer) >= 1]
-        options = []
-        while len(options) < WRONG_OPTION_CNT:
-            num = rng.choice(wrong_distances)
-            if all(abs(num - n) >= 1 for n in options):
-                options.append(num)
-        golden_answer = f'{golden_answer} m'
-        options = [f'{option} m' for option in options]
-    
-    elif q_type == QueryType.DISTANCE_LOCATION: 
-        dists = {obj:obj_map.get_distance(obj1=obj, obj2=target_obj) for obj in objects}
+        if not os.path.exists(info_dir):
+            continue
         
-        if query_context['meta'] == 'max':
-            golden_answer = max(dists, key=dists.get)
-        else:
-            golden_answer = min(dists, key=dists.get)
-
-        other_objs = [obj for obj in objects if obj != golden_answer]
-        hallu_objs = [obj for obj in ALL_OBJECTS if obj not in obj_map.objects]
-        if len(other_objs) < WRONG_OPTION_CNT:
-            other_objs += rng.choice(hallu_objs, size=WRONG_OPTION_CNT-len(other_objs), replace=False).tolist()
+        for file in tqdm(os.listdir(info_dir)):
+            if file.endswith(".json"):
+                file_path = os.path.join(info_dir, file)
+                
+                info = load_json_data(file_path)
+                sub_scene = ('_').join(file.split('_')[:-1])
+                
+                old_image_path = os.path.join(old_image_dir, sub_scene)
+                image_path = os.path.join(new_image_dir, sub_scene)
+                toy_image_path = os.path.join(toy_image_dir, f'{sub_scene}.png')
+                
+                if not os.path.exists(image_path):
+                    os.makedirs(image_path)
             
-        options = list(rng.choice(other_objs, size=WRONG_OPTION_CNT, replace=False))
-    
-    elif q_type == QueryType.DISTANCE_TRACKING:
-        dists = [obj_map.get_distance(obj1=view_obj, obj2=target_obj, time_step=i) 
-                 for i in range(obj_map.n_steps)]
-        changes = []
-        for i in range(1, len(dists)):
-            if dists[i] == dists[i-1]:
-                changes.append('unchanged')
-            elif dists[i] > dists[i-1]:
-                changes.append('farther')
-            else:
-                changes.append('closer')
-        
-        L = len(changes) 
-        pairs = [(i, j) for i in range(L) for j in range(i+1, L) if abs(i-j) > 1]
-        pairs_no_ends = [(i, j) for (i, j) in pairs if not (i in (0, L-1) and j in (0, L-1))]
-        i, j = (pairs_no_ends or pairs)[rng.integers(0, len(pairs_no_ends or pairs))]
-
-        masked = changes.copy()
-        masked[i] = "[MASK]"
-        masked[j] = "[MASK]"
-        masked_seq = " -> ".join(masked)
-
-        # options are ONLY the (mask_i, mask_j) fillings
-        golden_answer = f"{changes[i]}, {changes[j]}"
-        w_answers = [(a, b) for a in DISTANCES for b in DISTANCES
-                if (a != changes[i]) or (b != changes[j])]
-        options = list(rng.choice(w_answers, size=WRONG_OPTION_CNT, replace=False))
-        options = [(', ').join(option) for option in options]
-
-    elif q_type == QueryType.DIRECTION_EVALUATION:
-        golden_answer = obj_map.get_direction(target_obj=target_obj, view_obj=view_obj, centric=centric)
-        directions = EGO_DIRECTIONS if centric == Centric.EGO else ALLO_DIRECTIONS
-        w_directions = [d for d in directions if d != golden_answer]
-        options = list(rng.choice(w_directions, size=WRONG_OPTION_CNT, replace=False))
-    
-    elif q_type == QueryType.DIRECTION_LOCATION: 
-        direction = rng.choice(EGO_DIRECTIONS) if centric == Centric.EGO else rng.choice(ALLO_DIRECTIONS) 
-        dict = {obj: obj_map.get_direction(target_obj=obj, view_obj=target_obj, centric=centric)
-                      for obj in objects}
-        cor_objs = [obj for obj in dict if dict[obj] == direction]
-        wro_objs = [obj for obj in objects if obj not in cor_objs]
-        
-        directions = EGO_DIRECTIONS if centric == Centric.EGO else ALLO_DIRECTIONS
-        
-        attempts = 0
-        while not wro_objs or not cor_objs:
-            direction = rng.choice(directions)
-            cor_objs = [obj for obj in dict if dict[obj] == direction]
-            wro_objs = [obj for obj in objects if obj not in cor_objs]
-            attempts += 1
-            if attempts > 100:
-                return None
-        query_context['direction'] = direction
-        
-        for i, cur in enumerate(cor_objs):
-            for alt in wro_objs:
-                cand = cor_objs.copy()
-                cand[i] = alt  
-                options.append(cand)
-        rng.shuffle(options)
-        options = options[:min(len(options), WRONG_OPTION_CNT)]
-        golden_answer = (',').join(cor_objs)
-        options = [(',').join(option) for option in options]
-    
-    elif q_type == QueryType.DIRECTION_TRACKING:
-        dir_history = [obj_map.get_direction(target_obj=target_obj, view_obj=view_obj, time_step=i, centric=centric)
-                       for i in range(obj_map.n_steps)]
-        directions = EGO_DIRECTIONS if centric == Centric.EGO else ALLO_DIRECTIONS
-        
-        L = len(dir_history) 
-        pairs = [(i, j) for i in range(L) for j in range(i+1, L) if abs(i-j) > 1]
-        pairs_no_ends = [(i, j) for (i, j) in pairs if not (i in (0, L-1) and j in (0, L-1))]
-        i, j = (pairs_no_ends or pairs)[rng.integers(0, len(pairs_no_ends or pairs))]
-
-        masked = dir_history.copy()
-        masked[i] = "[MASK]"
-        masked[j] = "[MASK]"
-        masked_seq = " -> ".join(masked)
-
-        # options are ONLY the (mask_i, mask_j) fillings
-        golden_answer = f"{dir_history[i]}, {dir_history[j]}"
-        w_answers = [(a, b) for a in directions for b in directions
-                if (a != dir_history[i]) or (b != dir_history[j])]
-        options = list(rng.choice(w_answers, size=WRONG_OPTION_CNT, replace=False))
-        options = [(', ').join(option) for option in options]
-        
-    else:
-        pass
-    
-    random_index = rng.integers(low=0, high=len(options)+1)
-    golden_option = chr(ord('A') + random_index)
-    options.insert(random_index, golden_answer)
-    answer_context = {
-        'golden_answer': golden_answer,
-        'golden_option': golden_option,
-        'options': options,
-        "masked_seq": masked_seq
-    }      
-    
-    return answer_context
-
-
-def make_question_text(query_context, answer_context, action_text):
-    option_text = ""
-    for i, option in enumerate(answer_context['options']):
-        option_text += f"({chr(ord('A') + i)}) {option} "
-    option_text = option_text.strip()
-    query_context['options'] = option_text
-    query_context['masked_seq'] = answer_context['masked_seq']
-        
-    query = ""
-    if action_text:
-        query += "Suppose we perform the following movements in the image: "
-        query += action_text
-    query_text = query_context['text']
-    query += query_text.format(**query_context)
-
-    query_context['options'] = answer_context['options']
-    query_context['golden_answer'] = answer_context['golden_answer']
-    query_context['type'] = query_context['type'].value
-    query_context['centric'] = query_context['centric'].value
-    
-    return query, answer_context['golden_option'], query_context
-
-
-def main(args):
-    q_type = QueryType(args.type)
-    questions = []
-    scene_infos = load_dataset_scenes(args)
-    data_rng, action_rng, question_rng = setup_independent_generators(main_seed=args.seed, num_generators=3)
-    
-    idx = 0
-    for scene_info in tqdm(scene_infos):
-        object_info = scene_info['objects']
-        scene_name = scene_info['scene']
-        image_path = scene_info['image_path']
-        query_history = []
-        for centric in list(Centric):
-            for _ in range(args.n_samples):
-                obj_map = ObjectMap(object_info)
-                objects = [obj for obj in obj_map.objects if obj != 'camera']
-
-                query_context = generate_query(objects=objects,
-                                                obj_map=obj_map,
-                                                q_type=q_type, 
-                                                centric=centric,
-                                                rng=data_rng)
-                if not query_context or query_context in query_history:
-                    continue
-                else:
-                    query_history.append(query_context)
+                    for filename in os.listdir(old_image_path):
+                        if filename.lower().endswith('.png'):
+                            shutil.copy2(os.path.join(old_image_path, filename), image_path)
+                
+                if not os.path.exists(toy_image_path):
+                    map = ObjectMap(info['object'])
+                    plot_toy_map(object_coords=map.map_history[0], save_path=toy_image_path)
+                
+                info['scene'] = scene_name
+                info['sub_scene'] = sub_scene
+                info['image_path'] = image_path
                     
-                obj_actions = generate_actions(objects=objects, query_context=query_context, 
-                                            n_steps=args.obj_steps, rng=action_rng, 
-                                            target_ratio=args.move_ratio, ego_ratio=args.ego_ratio)
-                camera_actions = generate_actions(objects=None,  query_context=query_context, 
-                                                n_steps=args.camera_steps, rng=action_rng, 
-                                                target_ratio=args.move_ratio, ego_ratio=args.ego_ratio)
-                action_text, actions = merge_action_texts(obj_actions=obj_actions, 
-                                                        camera_actions=camera_actions, 
-                                                        rng=action_rng)
-                obj_map.apply_actions(actions)
+                scene_infos.append(info)
                 
-                answer_context = generate_answer(query_context=query_context,
-                                             obj_map=obj_map,
-                                             rng=question_rng)
-                if not answer_context:
-                    continue
+    return scene_infos
+    
+    
+def main(args):
+
+    scene_infos = load_scene_info(scene_ls=ALL_SCENES, split=args.split)
+    
+    all_questions = {scene: {'all':[]} for scene in ALL_SCENES}
+    all_questions['all'] = {}
+    all_questions['all']['all'] = []
+    
+    for task in TaskType:
+        generator = QuestionGenerator(task=task, args=args)
+        idx = 0 
+        
+        for k in all_questions:
+            all_questions[k][task.value] = []
+        
+        for scene_info in tqdm(scene_infos):
             
-                query, answer, query_context = make_question_text(query_context=query_context,
-                                                                answer_context=answer_context,
-                                                                action_text=action_text)
+            for query_type in QueryType:
+                generator.load_scene(scene_info)
                 
+                q_ctx = generator.generate_query(query_type=query_type)
                 
+                if not q_ctx: 
+                    continue
+                
+                if task == TaskType.SSP:
+                    action_text = ""
+                    actions = None
+
+                else:
+                    action_text, actions = generator.generate_action(query_context=q_ctx,
+                                                                    ego_ratio=args.ego_ratio)
+                    generator.update_map(actions)
+                    
+                ans_ctx = generator.generate_answer(q_ctx)
+    
+                if not ans_ctx: 
+                    continue
+                
+                query_text = generator.render_question(q_ctx, ans_ctx, action_text)
+                
+                q_ctx['type'] = q_ctx['type'].value
+                q_ctx['centric'] = q_ctx['centric'].value
+
                 msg = {
-                    'id': f"{args.type.upper()}_{centric.value.upper()}_Q{idx+1}",
-                    'scene': scene_name,
-                    'obj_cnt': scene_info['obj_cnt'],
-                    'image_path': image_path,
-                    'query': query,
-                    'answer': answer,
+                    'id': f"{task.value.upper()}_{query_type.value.upper()}_Q{idx+1}",
+                    'image_path': scene_info['image_path'],
+                    'query': query_text,
+                    'answer': ans_ctx['golden_option'],
                     'meta': {
-                        'query': query_context,
-                        'action': [action.to_dict() for action in actions] if actions else None,
-                        'map': {
-                            'yam': obj_map.yaw_history,
-                            'map': obj_map.map_history
-                        }
+                        'query_type': query_type.value,
+                        'task': task.value,
+                        'scene': scene_info['scene'],
+                        'sub_scene': scene_info['sub_scene'],
+                        "image_cnt": scene_info['view_cnt'],
+                        'query': q_ctx,
+                        'action': [a.to_dict() for a in actions] if actions else None,
+                        'answer': ans_ctx,
+                        'yaw_history': generator.map.yaw_history, 
+                        'map_history': generator.map.map_history
                     }
                 }
                 
-                questions.append(msg)
+                
+                all_questions[scene_info['scene']][task.value].append(msg)
+                all_questions[scene_info['scene']]['all'].append(msg)
+                
+                all_questions['all'][task.value].append(msg)
+                all_questions['all']['all'].append(msg)
+                
                 idx += 1
+                    
 
-    question_dir = f'data/data/{args.dataset}/{args.split}/c{args.camera_steps}_o{args.obj_steps}_mr{args.move_ratio}_er{args.ego_ratio}/'
-    if not os.path.exists(question_dir):
-        os.makedirs(question_dir)
-    question_path = os.path.join(question_dir, f'{args.type}.json')
-    with open(question_path, 'w') as f:
-        json.dump(questions, f, indent=4)
-        f.close()
-    return 
+    for scene, v in all_questions.items():
+        for task, data in v.items():
+            random.shuffle(data)
+                  
+            question_dir = f'data/MentalGrid/{scene}/{task}/'
+            if not os.path.exists(question_dir):
+                os.makedirs(question_dir)
+            
+            path = os.path.join(question_dir, f'{args.split}.json')
+            if not os.path.exists(path) or args.reload:
+                save_json_data(path=path, data=data)
+    
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--source", type=str, default='replica')
 parser.add_argument("--seed", type=int, default=17)
 parser.add_argument("--split", type=str, default='train')
-parser.add_argument("--n_samples", type=int, default=5)
-parser.add_argument("--type", type=str, default='direction_evaluation')
-parser.add_argument("--camera_steps", type=int, default=0)
-parser.add_argument("--obj_steps", type=int, default=0)
-parser.add_argument("--move_ratio", type=float, default=0.5)
 parser.add_argument("--ego_ratio", type=float, default=0.5)
+parser.add_argument("--reload", action='store_true')
+
 args = parser.parse_args()
 
-    
+
 if __name__ == '__main__':
-    
     main(args)

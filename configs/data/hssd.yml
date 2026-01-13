@@ -13,6 +13,12 @@ similar_groups: {
   "box": [3, 10, 15]
 }
 
+width: 1280
+height: 720
+sensor_height: 1.5
+fov: 100
+seed: 17
+
 max_x: 3.0
 min_x: -3.0
 max_z: -1.0

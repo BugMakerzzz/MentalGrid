@@ -3,14 +3,15 @@ from utils.template import Direction, ALLO_DIRECTIONS, EGO_DIRECTIONS, Movement,
 
 
 class ObjectMap:
-    def __init__(self, locations) -> None:
+    def __init__(self, obj_info) -> None:
         map = {}
         self.objects = []
-        for obj in locations:
+        
+        for id, obj in obj_info.items():
             self.objects.append(obj['name'])
-            map[obj['name']] = [obj['location'][0], -obj['location'][2]]
-        self.objects.append('camera')
-        map['camera'] = [0.0, 0.0]
+            map[obj['name']] = [obj['pos'][0], -obj['pos'][2]]
+        
+        map['agent'] = [0.0, 0.0]
         
         self.yaw_history = [(0, 1)]
         self.map_history = [map]
@@ -46,14 +47,19 @@ class ObjectMap:
         return rounded_distance
     
     
-    def get_direction(self, target_obj, view_obj, time_step=-1, centric=Centric.ALLO):
+    def get_direction(self, target_obj, view_obj, centric, 
+                      time_step=-1, return_type='direction'):
+        
         loc1 = self.get_location(target_obj, time_step=time_step)
         loc2 = self.get_location(view_obj, time_step=time_step)
         relative_x = loc1[0] - loc2[0]
         relative_y = loc1[1] - loc2[1]
+        
         angle_radians = math.atan2(relative_y, relative_x)
         angle_degrees = math.degrees(angle_radians)
-        adjusted_angle = 90 - angle_degrees
+        
+        adjusted_angle  = 90 - angle_degrees
+        
         
         if centric == Centric.EGO:
             yaw = self.yaw_history[time_step]
@@ -61,14 +67,23 @@ class ObjectMap:
             view_yaw_deg = yaw_map.get(yaw, 270)
                 
             adjusted_angle = (adjusted_angle - view_yaw_deg + 360) % 360
-            index = self.get_direction_index(adjusted_angle)
-            return EGO_DIRECTIONS[index]
+            
+            if return_type == 'angle':
+                return adjusted_angle
+            
+            else:
+            
+                index = self.get_direction_index(adjusted_angle)
+                return EGO_DIRECTIONS[index]
             
         else:
             adjusted_angle = (adjusted_angle + 360) % 360
-
-            index = self.get_direction_index(adjusted_angle)
-            return ALLO_DIRECTIONS[index]
+            
+            if return_type == 'angle':
+                return adjusted_angle
+            else:
+                index = self.get_direction_index(adjusted_angle)
+                return ALLO_DIRECTIONS[index]
     
     
         

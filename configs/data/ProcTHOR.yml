@@ -3,7 +3,6 @@ config_path: "/mnt/userdata/ljc/data/ai2thor-hab/ai2thor-hab/ai2thor-hab.scene_d
 semantic_path: "/mnt/userdata/ljc/data/ai2thor-hab/ai2thor-hab/configs/object_semantic_id_mapping.json"
 split_path: "/mnt/userdata/ljc/data/ai2thor-hab/ai2thor-hab/configs/scenes/ProcTHOR/scene_splits.yml"
 
-
 exclude_index: [0, 51, 55, 57, 105, 106, 107, 154, 158, 159, 162]
 similar_groups: {
   "food_apple": [1, 2],
@@ -23,6 +22,12 @@ similar_groups: {
   "paintings": [48, 102, 103, 104, 140],
   "towels": [85, 141]
 }
+
+width: 1280
+height: 720
+sensor_height: 1.5
+fov: 90
+seed: 17
 
 max_x: 3.0
 min_x: -3.0
